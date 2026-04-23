@@ -53,24 +53,24 @@ Architektura projektu została podzielona na fazę prototypową oraz docelowe ro
   <tr>
     <td align="center" width="33%">
       <img src="" width="120" alt="Avatar"/><br><br>
-      <strong>Imię i Nazwisko</strong><br>
-      <em>Member 1</em><br><br>
-      <a href="mailto:email@example.com"><kbd>Email</kbd></a> &nbsp; 
-      <a href="https://linkedin.com/in/username"><kbd>LinkedIn</kbd></a>
+      <strong>Zuzanna Żyła</strong><br>
+      <em>Co-Founder</em><br><br>
+      <a href="mailto:hi@zuza.cc"><kbd>hi@zuza.cc</kbd></a> &nbsp; 
+      <a href="https://www.linkedin.com/in/hi-zuzanna-zyla/"><kbd>https://www.linkedin.com/in/hi-zuzanna-zyla//</kbd></a>
     </td>
     <td align="center" width="33%">
       <img src="" width="120" alt="Avatar"/><br><br>
-      <strong>Imię i Nazwisko</strong><br>
-      <em>Member 2</em><br><br>
-      <a href="mailto:email@example.com"><kbd>Email</kbd></a> &nbsp; 
-      <a href="https://linkedin.com/in/username"><kbd>LinkedIn</kbd></a>
+      <strong>Julian Stanisławek</strong><br>
+      <em>Co-Founder</em><br><br>
+      <a href="mailto:hi@infox.dev"><kbd>hi@infox.dev</kbd></a> &nbsp; 
+      <a href="https://linkedin.com/in/infox1337/"><kbd>https://www.linkedin.com/in/infox1337/</kbd></a>
     </td>
     <td align="center" width="33%">
       <img src="" width="120" alt="Avatar"/><br><br>
-      <strong>Imię i Nazwisko</strong><br>
-      <em>Member 3</em><br><br>
-      <a href="mailto:email@example.com"><kbd>Email</kbd></a> &nbsp; 
-      <a href="https://linkedin.com/in/username"><kbd>LinkedIn</kbd></a>
+      <strong>Tymoteusz Marzec</strong><br>
+      <em>Co-Founder</em><br><br>
+      <a href="mailto:tymoteusz.marzec.dev@gmail.com"><kbd>tymoteusz.marzec.dev@gmail.com</kbd></a> &nbsp; 
+      <a href="https://linkedin.com/in/tymoteusz-marzec-dev/"><kbd>https://www.linkedin.com/in/tymoteusz-marzec-dev/</kbd></a>
     </td>
   </tr>
 </table>
