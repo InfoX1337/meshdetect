@@ -1,0 +1,827 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dashboard zdarzeń — MVP</title>
+
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    crossorigin=""
+  />
+
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body class="civil-mode">
+  <div class="app">
+    <aside class="sidebar">
+      <h1>Dashboard zdarzeń</h1>
+      <p class="subtitle">Mapa incydentów w Polsce</p>
+
+      <button id="simulateBtn" class="simulate-btn">
+        Symuluj nowe zdarzenie
+      </button>
+
+      <div class="stats-row">
+        <div class="stat-box">
+          <div class="stat-label">Nowe</div>
+          <div id="newCount" class="stat-value">0</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-label">Zapisane</div>
+          <div id="archivedCount" class="stat-value">0</div>
+        </div>
+      </div>
+
+      <h2>Kategorie</h2>
+      <div class="filter-row" id="filterRow">
+        <button class="filter-btn active" data-filter="all">Wszystkie</button>
+        <button class="filter-btn" data-filter="kolizja">Kolizje</button>
+        <button class="filter-btn" data-filter="alarm">Alerty</button>
+        <button class="filter-btn" data-filter="niski_przelot">Niski przelot statku powietrznego</button>
+        <button class="filter-btn" data-filter="głośny_huk">Głośny huk</button>
+        <button class="filter-btn crisis-only-filter" data-filter="opancerzony_pojazd_bojowy">
+          Opancerzony pojazd bojowy
+        </button>
+      </div>
+
+      <h2>Historia</h2>
+      <div id="eventList" class="event-list"></div>
+    </aside>
+
+    <main class="main">
+      <div id="map"></div>
+
+      <div id="toastContainer" class="toast-container"></div>
+
+      <div id="floatingModeLabel" class="floating-mode-label">
+        Tryb cywilny
+      </div>
+
+      <button id="modeToggleBtn" class="mode-toggle mode-toggle-danger">
+        Przejdź do trybu kryzysowego
+      </button>
+
+      <div id="crisisTicker" class="crisis-ticker"></div>
+    </main>
+  </div>
+
+  <script
+    src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+    crossorigin=""
+  ></script>
+
+  <script>
+    const API_BASE_URL = "http://localhost:8010";
+    const state = {
+      allEvents: [],
+      nextId: 1,
+      currentFilter: "all",
+      previousCivilFilter: "all",
+      currentMode: "civil",
+      activeEventId: null,
+      hasFittedApiEvents: false,
+      map: null,
+      lightLayer: null,
+      darkLayer: null,
+      markerLayer: null,
+      markersById: new Map(),
+      canvasRenderer: null
+    };
+
+    const eventListEl = document.getElementById("eventList");
+    const toastContainerEl = document.getElementById("toastContainer");
+    const simulateBtn = document.getElementById("simulateBtn");
+    const filterRow = document.getElementById("filterRow");
+    const newCountEl = document.getElementById("newCount");
+    const archivedCountEl = document.getElementById("archivedCount");
+    const modeToggleBtn = document.getElementById("modeToggleBtn");
+    const floatingModeLabelEl = document.getElementById("floatingModeLabel");
+    const crisisTickerEl = document.getElementById("crisisTicker");
+    const CRISIS_ONLY_TYPES = ["opancerzony_pojazd_bojowy"];
+    const CRISIS_VISIBLE_TYPES = ["niski_przelot", "opancerzony_pojazd_bojowy"];
+
+    function getColorByType(type) {
+      switch (type) {
+        case "kolizja":
+          return "#ef4444";
+        case "alarm":
+          return "#3b82f6";
+        case "niski_przelot":
+          return "#f59e0b";
+        case "głośny_huk":
+          return "#a855f7";
+        case "opancerzony_pojazd_bojowy":
+          return "#22c55e";
+        default:
+          return "#64748b";
+      }
+    }
+
+    function getTypeLabel(type) {
+      switch (type) {
+        case "kolizja":
+          return "Kolizja";
+        case "alarm":
+          return "Alert";
+        case "niski_przelot":
+          return "Niski przelot";
+        case "głośny_huk":
+          return "Głośny huk";
+        case "opancerzony_pojazd_bojowy":
+          return "Opancerzony pojazd bojowy";
+        default:
+          return type;
+      }
+    }
+
+    function getSeverityLabel(severity) {
+      switch (severity) {
+        case "high":
+          return "Wysoki";
+        case "medium":
+          return "Średni";
+        case "low":
+          return "Niski";
+        default:
+          return severity;
+      }
+    }
+
+    function createPulseIcon(color) {
+      return L.divIcon({
+        className: "",
+        iconSize: [22, 22],
+        iconAnchor: [11, 11],
+        popupAnchor: [0, -12],
+        html: `
+          <div class="pulse-marker" style="--pulse-color: ${color};">
+            <div class="pulse-ring"></div>
+            <div class="pulse-core"></div>
+          </div>
+        `
+      });
+    }
+
+    function getEventKey(id) {
+      return String(id);
+    }
+
+    function getClientKey(event) {
+      return event.__clientKey || getEventKey(event.id);
+    }
+
+    function normalizeApiEvent(event, index = 0) {
+  return {
+    ...event,
+    id: String(event.id),
+    lat: Number(event.lat),
+    lng: Number(event.lng),
+    isNew: Boolean(event.isNew ?? true),
+    __clientKey: event.__clientKey || `api-${event.id}-${index}`
+  };
+}
+
+async function fetchEventsFromApi() {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/events`);
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+
+    const apiEvents = await response.json();
+
+    const previousById = new Map(
+      state.allEvents.map(event => [String(event.id), event])
+    );
+
+    const normalized = apiEvents.map((event, index) => {
+      const normalizedEvent = normalizeApiEvent(event, index);
+      const previous = previousById.get(normalizedEvent.id);
+
+      if (previous) {
+        normalizedEvent.isNew = previous.isNew;
+        normalizedEvent.__clientKey =
+          previous.__clientKey || normalizedEvent.__clientKey;
+      }
+
+      return normalizedEvent;
+    });
+
+    state.allEvents = normalized;
+
+    if (
+      state.activeEventId &&
+      !state.allEvents.some(event => getClientKey(event) === state.activeEventId)
+    ) {
+      state.activeEventId = null;
+    }
+
+    renderUI();
+
+    // Jednorazowo ustaw mapę na eventy z API, żeby je od razu było widać
+    if (!state.hasFittedApiEvents && normalized.length > 0) {
+      const validPoints = normalized
+        .map(event => [Number(event.lat), Number(event.lng)])
+        .filter(([lat, lng]) => !Number.isNaN(lat) && !Number.isNaN(lng));
+
+      if (validPoints.length === 1) {
+        state.map.setView(validPoints[0], 8, { animate: false });
+        state.hasFittedApiEvents = true;
+      } else if (validPoints.length > 1) {
+        state.map.fitBounds(validPoints, { padding: [40, 40] });
+        state.hasFittedApiEvents = true;
+      }
+    }
+  } catch (error) {
+    console.error("Błąd pobierania eventów z API:", error);
+  }
+}
+
+async function postEventToApi(eventPayload) {
+  const response = await fetch(`${API_BASE_URL}/api/events`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(eventPayload)
+  });
+
+  if (!response.ok) {
+    throw new Error(`POST /api/events failed: HTTP ${response.status}`);
+  }
+
+  return response.json();
+}
+
+    
+
+    function initMap() {
+      state.map = L.map("map", {
+        preferCanvas: true,
+        zoomAnimation: false,
+        fadeAnimation: false,
+        markerZoomAnimation: false,
+        minZoom: 6,
+        maxZoom: 18
+      }).setView([52.1, 19.4], 7);
+    
+      state.canvasRenderer = L.canvas({ padding: 0.5 });
+    
+      state.lightLayer = L.tileLayer(
+        "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+        {
+          maxZoom: 18,
+          attribution: "&copy; OpenStreetMap contributors",
+          detectRetina: false,
+          updateWhenIdle: true,
+          keepBuffer: 2
+        }
+      );
+    
+      state.darkLayer = L.tileLayer(
+        "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",
+        {
+          maxZoom: 18,
+          attribution: "&copy; OpenStreetMap contributors &copy; CARTO",
+          detectRetina: false,
+          updateWhenIdle: true,
+          keepBuffer: 2
+        }
+      );
+    
+      state.lightLayer.addTo(state.map);
+      state.markerLayer = L.layerGroup().addTo(state.map);
+    
+      
+    }
+
+    function getVisibleEvents() {
+      let events = [...state.allEvents];
+    
+      if (state.currentMode === "civil") {
+        events = events.filter(event => !CRISIS_ONLY_TYPES.includes(event.type));
+      }
+    
+      if (state.currentFilter === "all") {
+        return events;
+      }
+    
+      return events.filter(event => event.type === state.currentFilter);
+    }
+
+    function getNewEvents() {
+      let events = state.allEvents.filter(event => event.isNew);
+    
+      if (state.currentMode === "civil") {
+        events = events.filter(event => !CRISIS_ONLY_TYPES.includes(event.type));
+      } else {
+        events = events.filter(event => CRISIS_VISIBLE_TYPES.includes(event.type));
+      }
+    
+      return events.sort((a, b) => String(b.id).localeCompare(String(a.id), undefined, { numeric: true }));
+    }
+
+    function updateCounters() {
+      newCountEl.textContent = state.allEvents.filter(event => event.isNew).length;
+      archivedCountEl.textContent = state.allEvents.filter(event => !event.isNew).length;
+    }
+
+    function renderMarkers() {
+      state.markerLayer.clearLayers();
+      state.markersById.clear();
+    
+      const visibleEvents = getVisibleEvents();
+    
+      visibleEvents.forEach((event) => {
+        console.log("Rendering marker for:", event);
+
+        const lat = Number(event.lat);
+        const lng = Number(event.lng);
+    
+        if (Number.isNaN(lat) || Number.isNaN(lng)) return;
+    
+        const color = getColorByType(event.type);
+        const clientKey = getClientKey(event);
+    
+        let marker;
+    
+        if (event.severity === "high") {
+          marker = L.marker([lat, lng], {
+            icon: createPulseIcon(color),
+            zIndexOffset: 1000
+          });
+        } else {
+          marker = L.circleMarker([lat, lng], {
+            renderer: state.canvasRenderer,
+            radius: 10,
+            color,
+            fillColor: color,
+            fillOpacity: 0.85,
+            weight: 2
+          });
+        }
+    
+        marker.bindPopup(
+          `
+            <strong>${event.title}</strong><br/>
+            Typ: ${getTypeLabel(event.type)}<br/>
+            Priorytet: ${getSeverityLabel(event.severity)}<br/>
+            Czas: ${event.time}<br/>
+            Status: ${event.isNew ? "NOWE" : "ZAPISANE"}<br/>
+            Opis: ${event.description}
+          `,
+          {
+            autoPan: false
+          }
+        );
+    
+        marker.addTo(state.markerLayer);
+        state.markersById.set(clientKey, marker);
+      });
+    }
+
+    function renderEventList() {
+      eventListEl.innerHTML = "";
+    
+      const archivedEvents = getVisibleEvents()
+        .filter(event => !event.isNew)
+        .sort((a, b) => String(b.id).localeCompare(String(a.id), undefined, { numeric: true }));
+    
+      if (archivedEvents.length === 0) {
+        eventListEl.innerHTML = `<div class="empty-state">Brak zapisanych zdarzeń w tej kategorii</div>`;
+        return;
+      }
+    
+      archivedEvents.forEach((event) => {
+        const clientKey = getClientKey(event);
+        const card = document.createElement("div");
+        card.className = "event-card";
+    
+        if (state.activeEventId === clientKey) {
+          card.classList.add("active");
+        }
+    
+        card.dataset.id = clientKey;
+    
+        card.innerHTML = `
+          <div class="event-card-top">
+            <div class="badges">
+              <span class="badge badge-type"
+                style="background:${getColorByType(event.type)}20; color:${getColorByType(event.type)}; border-color:${getColorByType(event.type)}66;">
+                ${getTypeLabel(event.type)}
+              </span>
+              <span class="badge badge-severity badge-${event.severity}">
+                ${getSeverityLabel(event.severity)}
+              </span>
+            </div>
+    
+            <button class="delete-btn" data-id="${clientKey}">Usuń</button>
+          </div>
+    
+          <div class="event-title">${event.title}</div>
+          <div class="event-meta">Czas: ${event.time}</div>
+          <div class="event-meta">${event.description}</div>
+        `;
+    
+        card.addEventListener("click", () => {
+          focusEvent(clientKey);
+        });
+    
+        const deleteBtn = card.querySelector(".delete-btn");
+        deleteBtn.addEventListener("click", (e) => {
+          e.stopPropagation();
+          deleteEvent(clientKey);
+        });
+    
+        eventListEl.appendChild(card);
+      });
+    }
+
+    function renderNotifications() {
+      toastContainerEl.innerHTML = "";
+    
+      if (state.currentMode === "crisis") return;
+    
+      const newEvents = getVisibleEvents()
+        .filter(event => event.isNew)
+        .sort((a, b) =>
+          String(b.id).localeCompare(String(a.id), undefined, { numeric: true })
+        );
+    
+      newEvents.forEach((event) => {
+        const clientKey = getClientKey(event);
+    
+        const toast = document.createElement("button");
+        toast.className = "toast";
+        toast.dataset.id = clientKey;
+    
+        toast.innerHTML = `
+          <div class="toast-title">Nowe zdarzenie</div>
+          <div class="toast-main">${event.title}</div>
+          <div class="toast-meta">${getTypeLabel(event.type)} • ${getSeverityLabel(event.severity)}</div>
+        `;
+    
+        toast.addEventListener("click", () => {
+          acknowledgeEvent(clientKey);
+        });
+    
+        toastContainerEl.appendChild(toast);
+      });
+    }
+
+    function renderCrisisTicker() {
+      if (state.currentMode !== "crisis") {
+        crisisTickerEl.classList.remove("visible");
+        crisisTickerEl.innerHTML = "";
+        return;
+      }
+
+      crisisTickerEl.classList.add("visible");
+
+      const newEvents = getNewEvents();
+
+      if (newEvents.length === 0) {
+        crisisTickerEl.innerHTML = `
+          <div class="ticker-title">TRYB KRYZYSOWY</div>
+          <div class="ticker-empty">Brak nowych incydentów</div>
+        `;
+        return;
+      }
+
+      crisisTickerEl.innerHTML = `
+        <div class="ticker-title">TRYB KRYZYSOWY · nowe incydenty</div>
+        <div class="ticker-items">
+          ${newEvents.map(event => `
+            <button class="ticker-item" data-id="${getClientKey(event)}">
+              <span class="ticker-dot" style="background:${getColorByType(event.type)};"></span>
+              <span class="ticker-text">
+                ${event.title} · ${getTypeLabel(event.type)} · ${getSeverityLabel(event.severity)}
+              </span>
+            </button>
+          `).join("")}
+        </div>
+      `;
+
+      crisisTickerEl.querySelectorAll(".ticker-item").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const eventId = btn.dataset.id;
+          acknowledgeEvent(eventId);
+        });
+      });
+    }
+
+    function updateModeUI() {
+      document.body.classList.toggle("civil-mode", state.currentMode === "civil");
+      document.body.classList.toggle("crisis-mode", state.currentMode === "crisis");
+    
+      if (state.currentMode === "civil") {
+        if (!state.previousCivilFilter || CRISIS_ONLY_TYPES.includes(state.previousCivilFilter)) {
+          state.previousCivilFilter = "all";
+        }
+    
+        state.currentFilter = state.previousCivilFilter || "all";
+    
+        floatingModeLabelEl.textContent = "Tryb cywilny";
+        modeToggleBtn.textContent = "Przejdź do trybu kryzysowego";
+        modeToggleBtn.className = "mode-toggle mode-toggle-danger";
+    
+        if (state.map.hasLayer(state.darkLayer)) state.map.removeLayer(state.darkLayer);
+        if (!state.map.hasLayer(state.lightLayer)) state.lightLayer.addTo(state.map);
+      } else {
+        if (
+          state.currentFilter !== "all" &&
+          !CRISIS_ONLY_TYPES.includes(state.currentFilter) &&
+          !CRISIS_VISIBLE_TYPES.includes(state.currentFilter)
+        ) {
+          state.previousCivilFilter = state.currentFilter;
+        }
+    
+        if (!CRISIS_VISIBLE_TYPES.includes(state.currentFilter)) {
+          state.currentFilter = "niski_przelot";
+        }
+    
+        floatingModeLabelEl.textContent = "Tryb kryzysowy";
+        modeToggleBtn.textContent = "Powrót do trybu cywilnego";
+        modeToggleBtn.className = "mode-toggle mode-toggle-safe";
+    
+        if (state.map.hasLayer(state.lightLayer)) state.map.removeLayer(state.lightLayer);
+        if (!state.map.hasLayer(state.darkLayer)) state.darkLayer.addTo(state.map);
+      }
+    
+      updateCategoryVisibility();
+      syncFilterButtons();
+    
+      setTimeout(() => {
+        state.map.invalidateSize();
+      }, 50);
+    
+      renderUI();
+    }
+
+    function renderUI() {
+      updateCounters();
+      renderMarkers();
+      renderEventList();
+      renderNotifications();
+      renderCrisisTicker();
+    }
+
+    function syncFilterButtons() {
+      document.querySelectorAll(".filter-btn").forEach((btn) => {
+        btn.classList.toggle("active", btn.dataset.filter === state.currentFilter);
+      });
+    }
+
+    function updateCategoryVisibility() {
+      const buttons = filterRow.querySelectorAll(".filter-btn");
+    
+      buttons.forEach((btn) => {
+        const filter = btn.dataset.filter;
+    
+        if (state.currentMode === "crisis") {
+          btn.style.display = CRISIS_VISIBLE_TYPES.includes(filter) ? "inline-flex" : "none";
+        } else {
+          btn.style.display = filter === "opancerzony_pojazd_bojowy" ? "none" : "";
+        }
+      });
+    }
+
+    function focusEvent(eventClientKey) {
+      const event = state.allEvents.find(e => getClientKey(e) === eventClientKey);
+    
+      if (!event) return;
+    
+      state.activeEventId = eventClientKey;
+    
+      let marker = state.markersById.get(eventClientKey);
+    
+      if (!marker) {
+        state.currentFilter = event.type;
+        syncFilterButtons();
+        renderUI();
+        marker = state.markersById.get(eventClientKey);
+      } else {
+        renderEventList();
+      }
+    
+      if (!marker) return;
+    
+      const lat = Number(event.lat);
+      const lng = Number(event.lng);
+    
+      if (Number.isNaN(lat) || Number.isNaN(lng)) return;
+    
+      if (state.map.stop) {
+        state.map.stop();
+      }
+    
+      state.map.setView([lat, lng], 12, {
+        animate: false
+      });
+    
+      state.map.closePopup();
+      marker.openPopup();
+    }
+
+    function acknowledgeEvent(eventClientKey) {
+      const event = state.allEvents.find(e => getClientKey(e) === eventClientKey);
+    
+      if (!event) {
+        console.warn("Nie znaleziono eventu do acknowledge:", eventClientKey);
+        return;
+      }
+    
+      event.isNew = false;
+      renderUI();
+      focusEvent(getClientKey(event));
+    }
+
+    function deleteEvent(eventClientKey) {
+      if (state.activeEventId === eventClientKey) {
+        state.activeEventId = null;
+      }
+    
+      state.allEvents = state.allEvents.filter(event => getClientKey(event) !== eventClientKey);
+      renderUI();
+    }
+
+    function toggleMode() {
+      state.currentMode = state.currentMode === "civil" ? "crisis" : "civil";
+      updateModeUI();
+    }
+
+    function getCurrentTimeString() {
+      const now = new Date();
+      const yyyy = now.getFullYear();
+      const mm = String(now.getMonth() + 1).padStart(2, "0");
+      const dd = String(now.getDate()).padStart(2, "0");
+      const hh = String(now.getHours()).padStart(2, "0");
+      const min = String(now.getMinutes()).padStart(2, "0");
+      return `${yyyy}-${mm}-${dd} ${hh}:${min}`;
+    }
+
+    function randomFromArray(arr) {
+      return arr[Math.floor(Math.random() * arr.length)];
+    }
+
+    const POLAND_POLYGON = [
+  [14.10, 54.40],
+  [15.20, 54.75],
+  [16.80, 54.75],
+  [18.20, 54.83],
+  [19.60, 54.60],
+  [21.20, 54.45],
+  [22.80, 54.35],
+  [23.85, 54.10],
+  [23.95, 53.20],
+  [23.70, 52.20],
+  [24.10, 50.85],
+  [23.30, 49.60],
+  [22.20, 49.10],
+  [20.90, 49.05],
+  [19.40, 49.05],
+  [18.20, 49.00],
+  [17.10, 50.10],
+  [16.20, 50.35],
+  [14.90, 51.10],
+  [14.15, 52.70],
+  [14.10, 54.40]
+];
+
+// point = [lng, lat]
+function isPointInPolygon(point, polygon) {
+  const [x, y] = point;
+  let inside = false;
+
+  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+    const xi = polygon[i][0], yi = polygon[i][1];
+    const xj = polygon[j][0], yj = polygon[j][1];
+
+    const intersect =
+      ((yi > y) !== (yj > y)) &&
+      (x < ((xj - xi) * (y - yi)) / ((yj - yi) || 1e-12) + xi);
+
+    if (intersect) inside = !inside;
+  }
+
+  return inside;
+}
+
+function generateRandomPointInPoland() {
+  const minLat = 49.00;
+  const maxLat = 54.85;
+  const minLng = 14.10;
+  const maxLng = 24.15;
+
+  for (let attempt = 0; attempt < 200; attempt++) {
+    const lat = minLat + Math.random() * (maxLat - minLat);
+    const lng = minLng + Math.random() * (maxLng - minLng);
+
+    if (isPointInPolygon([lng, lat], POLAND_POLYGON)) {
+      return { lat, lng };
+    }
+  }
+
+  // fallback awaryjny, jeśli jakimś cudem nie znajdzie punktu
+  return { lat: 52.1, lng: 19.4 };
+}
+
+async function simulateNewEvent() {
+  const types =
+    state.currentMode === "crisis"
+      ? ["niski_przelot", "opancerzony_pojazd_bojowy"]
+      : ["kolizja", "alarm", "niski_przelot", "głośny_huk"];
+
+  const titles = {
+    kolizja: "Nowe podejrzenie kolizji",
+    alarm: "Nowy alert techniczny",
+    niski_przelot: "Wykryto niski przelot obiektu",
+    głośny_huk: "Wykryto silny huk",
+    opancerzony_pojazd_bojowy: "Wykryto opancerzony pojazd bojowy"
+  };
+
+  const descriptions = {
+    kolizja: "Nagły impuls akustyczny przy trasie.",
+    alarm: "Zdarzenie wymagające sprawdzenia przez operatora.",
+    niski_przelot: "Nietypowy sygnał akustyczny nad obszarem.",
+    głośny_huk: "Wysoka energia zdarzenia, wymagana weryfikacja.",
+    opancerzony_pojazd_bojowy:
+      "Zdarzenie o podwyższonym priorytecie w trybie kryzysowym. Wymagana natychmiastowa weryfikacja operacyjna i ocena sytuacji terenowej."
+  };
+
+  const type = randomFromArray(types);
+  const point = generateRandomPointInPoland();
+
+  const payload = {
+    type,
+    title: titles[type],
+    description: descriptions[type],
+    severity:
+      type === "opancerzony_pojazd_bojowy"
+        ? randomFromArray(["high", "medium"])
+        : randomFromArray(["high", "medium", "low"]),
+    lat: point.lat,
+    lng: point.lng,
+    source: "frontend-sim"
+  };
+
+  try {
+    await postEventToApi(payload);
+    await fetchEventsFromApi();
+  } catch (error) {
+    console.error("Błąd wysyłania symulowanego eventu do API:", error);
+  }
+}
+
+async function loadEvents() {
+  try {
+    const response = await fetch("./events.json");
+    const data = await response.json();
+
+    state.allEvents = data.map((event, index) => ({
+      ...event,
+      id: String(event.id),
+      lat: Number(event.lat),
+      lng: Number(event.lng),
+      isNew: false,
+      __clientKey: `seed-${String(event.id)}-${index}`
+    }));
+
+    const numericIds = state.allEvents
+      .map(event => Number(event.id))
+      .filter(id => !Number.isNaN(id));
+
+    const maxExistingId = numericIds.length > 0 ? Math.max(...numericIds) : 0;
+    state.nextId = maxExistingId + 1;
+  } catch (error) {
+    console.error("Błąd ładowania events.json:", error);
+    state.allEvents = [];
+    state.nextId = 1;
+  }
+
+  renderUI();
+  updateModeUI();
+}
+
+    filterRow.addEventListener("click", (e) => {
+      const btn = e.target.closest(".filter-btn");
+      if (!btn) return;
+
+      state.currentFilter = btn.dataset.filter;
+      syncFilterButtons();
+      renderUI();
+    });
+
+    simulateBtn.addEventListener("click", simulateNewEvent);
+    modeToggleBtn.addEventListener("click", toggleMode);
+
+    initMap();
+fetchEventsFromApi();
+
+setInterval(fetchEventsFromApi, 2000);
+  </script>
+</body>
+</html>

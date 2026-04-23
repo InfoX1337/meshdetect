@@ -1,0 +1,75 @@
+[
+    {
+      "id": 1,
+      "type": "kolizja",
+      "title": "Podejrzenie kolizji drogowej",
+      "description": "Gwałtowny impuls akustyczny wykryty przez sensor.",
+      "lat": 52.2297,
+      "lng": 21.0122,
+      "severity": "high",
+      "time": "2026-04-11 12:10"
+    },
+    {
+      "id": 2,
+      "type": "niski_przelot",
+      "title": "Wykryto niski przelot obiektu",
+      "description": "Nietypowy sygnał akustyczny wymagający weryfikacji.",
+      "lat": 52.4064,
+      "lng": 16.9252,
+      "severity": "medium",
+      "time": "2026-04-11 12:14"
+    },
+    {
+      "id": 3,
+      "type": "alarm",
+      "title": "Alert lokalny",
+      "description": "Zdarzenie przekazane do operatora systemu.",
+      "lat": 51.7592,
+      "lng": 19.4560,
+      "severity": "low",
+      "time": "2026-04-11 12:18"
+    },
+  
+    {
+      "id": 1,
+      "type": "kolizja",
+      "title": "Podejrzenie kolizji drogowej",
+      "description": "Silny impuls akustyczny przy drodze wojewódzkiej.",
+      "lat": 51.2465,
+      "lng": 22.5684,
+      "severity": "high",
+      "time": "2026-04-11 10:12"
+    },
+    {
+      "id": 2,
+      "type": "alarm",
+      "title": "Alert techniczny przy obiekcie publicznym",
+      "description": "Anomalia akustyczna zgłoszona do operatora.",
+      "lat": 51.4090,
+      "lng": 21.9690,
+      "severity": "medium",
+      "time": "2026-04-11 10:25"
+    },
+    
+    {
+          "id": 1,
+          "type": "kolizja",
+          "title": "Podejrzenie kolizji drogowej",
+          "description": "Silny impuls akustyczny przy drodze wojewódzkiej.",
+          "lat": 51.2465,
+          "lng": 22.5684,
+          "severity": "high",
+          "time": "2026-04-11 10:12"
+    },
+    {
+          "id": 2,
+          "type": "alarm",
+          "title": "Alert techniczny przy obiekcie publicznym",
+          "description": "Anomalia akustyczna zgłoszona do operatora.",
+          "lat": 51.4090,
+          "lng": 21.9690,
+          "severity": "medium",
+          "time": "2026-04-11 10:25"
+    }
+      
+  ]
