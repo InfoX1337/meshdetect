@@ -1,4 +1,4 @@
-# Mesh Detect
+<img width="800" height="800" alt="timmy" src="https://github.com/user-attachments/assets/a3bdaf7e-f677-4750-8c85-4e029a586307" /># Mesh Detect
 
 [![Status: Development](https://img.shields.io/badge/Status-Development-orange.svg)]()
 [![Hardware: Meshy V1](https://img.shields.io/badge/Hardware-Meshy%20V1-blue.svg)]()
@@ -52,21 +52,21 @@ Architektura projektu została podzielona na fazę prototypową oraz docelowe ro
 <table align="center" width="100%">
   <tr>
     <td align="center" width="33%">
-      <img src="" width="120" alt="Avatar"/><br><br>
+      <img width="120" alt="zuza" src="https://github.com/user-attachments/assets/03371df1-593f-4f29-9ce6-c73cb86f9ee6" /><br><br>
       <strong>Zuzanna Żyła</strong><br>
       <em>Co-Founder</em><br><br>
       <a href="mailto:hi@zuza.cc"><kbd>hi@zuza.cc</kbd></a> &nbsp; 
       <a href="https://www.linkedin.com/in/hi-zuzanna-zyla/"><kbd>linkedin.com/in/hi-zuzanna-zyla</kbd></a>
     </td>
     <td align="center" width="33%">
-      <img src="" width="120" alt="Avatar"/><br><br>
+      <img width="120" alt="julek" src="https://github.com/user-attachments/assets/d0ee135c-2acf-47be-ab86-ed5af0e61441" /><br><br>
       <strong>Julian Stanisławek</strong><br>
       <em>Co-Founder</em><br><br>
       <a href="mailto:hi@infox.dev"><kbd>hi@infox.dev</kbd></a> &nbsp; 
       <a href="https://linkedin.com/in/infox1337/"><kbd>linkedin.com/in/infox1337</kbd></a>
     </td>
     <td align="center" width="33%">
-      <img src="" width="120" alt="Avatar"/><br><br>
+      <img width="120" alt="timmy" src="https://github.com/user-attachments/assets/96433452-fa50-489e-9a69-663bb1ba2899" /><br><br>
       <strong>Tymoteusz Marzec</strong><br>
       <em>Co-Founder</em><br><br>
       <a href="mailto:tymoteusz.marzec.dev@gmail.com"><kbd>tymoteusz.marzec.dev@gmail.com</kbd></a> &nbsp; 
