@@ -1,4 +1,4 @@
-<img width="800" height="800" alt="timmy" src="https://github.com/user-attachments/assets/a3bdaf7e-f677-4750-8c85-4e029a586307" /># Mesh Detect
+# Mesh Detect
 
 [![Status: Development](https://img.shields.io/badge/Status-Development-orange.svg)]()
 [![Hardware: Meshy V1](https://img.shields.io/badge/Hardware-Meshy%20V1-blue.svg)]()
