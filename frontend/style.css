@@ -281,10 +281,33 @@
     cursor: pointer;
     text-align: left;
     box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+    animation: toastSlideIn 0.4s ease-out;
   }
   
   .toast:hover {
     background: rgba(30, 41, 59, 0.98);
+  }
+  
+  .toast.dismissing {
+    animation: toastSlideOut 0.3s ease-in forwards;
+  }
+  
+  @keyframes toastSlideIn {
+    from {
+      opacity: 0;
+      transform: translateX(400px);
+    }
+    to {
+      opacity: 1;
+      transform: translateX(0);
+    }
+  }
+  
+  @keyframes toastSlideOut {
+    to {
+      opacity: 0;
+      transform: translateX(400px);
+    }
   }
   
   .toast-title {

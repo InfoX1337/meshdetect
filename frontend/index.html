@@ -73,7 +73,7 @@
   ></script>
 
   <script>
-    const API_BASE_URL = "http://localhost:8010";
+    const API_BASE_URL = "https://meshapi.infox.dev";
     const state = {
       allEvents: [],
       nextId: 1,
@@ -87,7 +87,9 @@
       darkLayer: null,
       markerLayer: null,
       markersById: new Map(),
-      canvasRenderer: null
+      canvasRenderer: null,
+      autoAcknowledgedIds: new Set(),
+      recentEventLog: []
     };
 
     const eventListEl = document.getElementById("eventList");
@@ -172,14 +174,50 @@
       return event.__clientKey || getEventKey(event.id);
     }
 
+    function calculateDistance(lat1, lng1, lat2, lng2) {
+      const R = 6371000;
+      const φ1 = (lat1 * Math.PI) / 180;
+      const φ2 = (lat2 * Math.PI) / 180;
+      const Δφ = ((lat2 - lat1) * Math.PI) / 180;
+      const Δλ = ((lng2 - lng1) * Math.PI) / 180;
+      const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
+                Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+      return R * c;
+    }
+
+    function isDuplicateEvent(eventType, lat, lng) {
+      const now = Date.now();
+      const tenSecondsAgo = now - 10000;
+      
+      return state.recentEventLog.some(logged => {
+        if (logged.timestamp < tenSecondsAgo) return false;
+        if (logged.type !== eventType) return false;
+        const distance = calculateDistance(logged.lat, logged.lng, lat, lng);
+        return distance <= 20;
+      });
+    }
+
+    function logRecentEvent(eventType, lat, lng) {
+      state.recentEventLog.push({
+        type: eventType,
+        lat: Number(lat),
+        lng: Number(lng),
+        timestamp: Date.now()
+      });
+      
+      const tenSecondsAgo = Date.now() - 10000;
+      state.recentEventLog = state.recentEventLog.filter(e => e.timestamp >= tenSecondsAgo);
+    }
+
     function normalizeApiEvent(event, index = 0) {
   return {
     ...event,
     id: String(event.id),
     lat: Number(event.lat),
     lng: Number(event.lng),
-    isNew: Boolean(event.isNew ?? true),
-    __clientKey: event.__clientKey || `api-${event.id}-${index}`
+    isNew: false,
+    __clientKey: event.__clientKey || `api-${event.id}`
   };
 }
 
@@ -202,9 +240,18 @@ async function fetchEventsFromApi() {
       const previous = previousById.get(normalizedEvent.id);
 
       if (previous) {
-        normalizedEvent.isNew = previous.isNew;
+        normalizedEvent.isNew = false;
         normalizedEvent.__clientKey =
           previous.__clientKey || normalizedEvent.__clientKey;
+      } else {
+        // Tylko dla nowych eventów sprawdzaj duplikaty
+        const isDuplicate = isDuplicateEvent(event.type, Number(event.lat), Number(event.lng));
+        if (!isDuplicate) {
+          logRecentEvent(event.type, Number(event.lat), Number(event.lng));
+          normalizedEvent.isNew = true;
+        } else {
+          normalizedEvent.isNew = false;
+        }
       }
 
       return normalizedEvent;
@@ -441,8 +488,6 @@ async function postEventToApi(eventPayload) {
     }
 
     function renderNotifications() {
-      toastContainerEl.innerHTML = "";
-    
       if (state.currentMode === "crisis") return;
     
       const newEvents = getVisibleEvents()
@@ -453,6 +498,16 @@ async function postEventToApi(eventPayload) {
     
       newEvents.forEach((event) => {
         const clientKey = getClientKey(event);
+        
+        // Pomijamy eventy już auto-acknowledged'ne
+        if (state.autoAcknowledgedIds.has(clientKey)) {
+          return;
+        }
+        
+        // Pomijamy jeśli toast już istnieje
+        if (toastContainerEl.querySelector(`[data-id="${clientKey}"]`)) {
+          return;
+        }
     
         const toast = document.createElement("button");
         toast.className = "toast";
@@ -465,10 +520,14 @@ async function postEventToApi(eventPayload) {
         `;
     
         toast.addEventListener("click", () => {
-          acknowledgeEvent(clientKey);
+          dismissToast(toast, clientKey);
         });
     
         toastContainerEl.appendChild(toast);
+    
+        setTimeout(() => {
+          dismissToast(toast, clientKey, false);
+        }, 5000);
       });
     }
 
@@ -626,7 +685,15 @@ async function postEventToApi(eventPayload) {
       marker.openPopup();
     }
 
-    function acknowledgeEvent(eventClientKey) {
+    function dismissToast(toastElement, eventClientKey, shouldFocus = true) {
+      toastElement.classList.add("dismissing");
+      setTimeout(() => {
+        toastElement.remove();
+        acknowledgeEvent(eventClientKey, shouldFocus);
+      }, 300);
+    }
+
+    function acknowledgeEvent(eventClientKey, shouldFocus = true) {
       const event = state.allEvents.find(e => getClientKey(e) === eventClientKey);
     
       if (!event) {
@@ -635,8 +702,11 @@ async function postEventToApi(eventPayload) {
       }
     
       event.isNew = false;
+      state.autoAcknowledgedIds.add(eventClientKey);
       renderUI();
-      focusEvent(getClientKey(event));
+      if (shouldFocus) {
+        focusEvent(getClientKey(event));
+      }
     }
 
     function deleteEvent(eventClientKey) {
