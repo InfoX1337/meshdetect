@@ -81,8 +81,8 @@ Architektura projektu została podzielona na fazę prototypową oraz docelowe ro
 
 Jesteś zainteresowany wdrożeniem systemu lub współpracą? Zapraszamy do kontaktu:
 
-* **Ogólne zapytania projektowe:** [contact@meshdetect.com](mailto:contact@meshdetect.com)
-* **Wsparcie techniczne:** [support@meshdetect.com](mailto:support@meshdetect.com)
+* **Ogólne zapytania projektowe:** [support@infox.dev](mailto:support@infox.dev)
+* **Wsparcie techniczne:** [support@infox.dev](mailto:support@infox.dev)
 
 ---
 
